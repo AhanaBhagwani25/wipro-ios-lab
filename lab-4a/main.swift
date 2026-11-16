@@ -115,3 +115,118 @@ class TodoListViewController: UIViewController, UITableViewDataSource, UITableVi
         }
     }
 }
+import SwiftUI
+
+struct TaskItem: Identifiable {
+    let id = UUID()
+    var title: String
+    var isDone = false
+}
+
+enum TaskFilter {
+    case all
+    case pending
+    case completed
+}
+
+class TaskViewModel: ObservableObject {
+
+    @Published var tasks: [TaskItem] = []
+    @Published var filter: TaskFilter = .all
+    @Published var errorMessage = ""
+
+    var visibleTasks: [TaskItem] {
+        switch filter {
+        case .all:
+            return tasks
+        case .pending:
+            return tasks.filter { !$0.isDone }
+        case .completed:
+            return tasks.filter { $0.isDone }
+        }
+    }
+
+    @discardableResult
+    func addTask(title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            errorMessage = "Task title cannot be empty"
+            return false
+        }
+        tasks.append(TaskItem(title: trimmed))
+        errorMessage = ""
+        return true
+    }
+
+    func toggle(_ task: TaskItem) {
+        if let index = tasks.firstIndex(where: { $0.id == task.id }) {
+            tasks[index].isDone.toggle()
+        }
+    }
+
+    func delete(at offsets: IndexSet) {
+        let idsToDelete = offsets.map { visibleTasks[$0].id }
+        tasks.removeAll { idsToDelete.contains($0.id) }
+    }
+}
+
+struct TaskListView: View {
+
+    @StateObject private var viewModel = TaskViewModel()
+    @State private var newTitle = ""
+
+    var body: some View {
+        NavigationView {
+            VStack {
+                HStack {
+                    TextField("New task", text: $newTitle)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Add") {
+                        if viewModel.addTask(title: newTitle) {
+                            newTitle = ""
+                        }
+                    }
+                }
+                .padding()
+
+                if !viewModel.errorMessage.isEmpty {
+                    Text(viewModel.errorMessage)
+                        .foregroundColor(.red)
+                }
+
+                Picker("Filter", selection: $viewModel.filter) {
+                    Text("All").tag(TaskFilter.all)
+                    Text("Pending").tag(TaskFilter.pending)
+                    Text("Done").tag(TaskFilter.completed)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                List {
+                    ForEach(viewModel.visibleTasks) { task in
+                        HStack {
+                            Text(task.title)
+                            Spacer()
+                            if task.isDone {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            viewModel.toggle(task)
+                        }
+                    }
+                    .onDelete { offsets in
+                        viewModel.delete(at: offsets)
+                    }
+                }
+            }
+            .navigationTitle("Tasks (MVVM)")
+        }
+    }
+}
+
+#Preview {
+    TaskListView()
+}
+
